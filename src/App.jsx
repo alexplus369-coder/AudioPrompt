@@ -1,3 +1,4 @@
+```react
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   FileText, Activity, Scissors, Clock, Drum, 
@@ -10,14 +11,15 @@ import {
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'audio-prompt-studio';
 
-// Función auxiliar para convertir "1:30" a 90 segundos
+// Función auxiliar robusta para convertir formatos de tiempo ("1:30", "15s", "0:05") a segundos
 const timeToSeconds = (timeStr) => {
   if (!timeStr) return 0;
-  const parts = timeStr.split(':');
-  if (parts.length === 2) {
+  const str = String(timeStr).toLowerCase().replace('s', '').trim();
+  if (str.includes(':')) {
+    const parts = str.split(':');
     return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
   }
-  return parseInt(timeStr, 10) || 0;
+  return parseInt(str, 10) || 0;
 };
 
 export default function App() {
@@ -36,13 +38,15 @@ export default function App() {
   const [analysisData, setAnalysisData] = useState(null);
   const [copied, setCopied] = useState("");
 
-  // Reproductor Interactivo Nativo
+  // Estados del Reproductor y Waveform Nativo
   const [audioUrl, setAudioUrl] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
+  const [waveformData, setWaveformData] = useState([]);
+  
   const audioRef = useRef(null);
-  const progressBarRef = useRef(null);
+  const canvasRef = useRef(null);
 
   const handleImageUpload = (id, file) => {
     if (!file) return;
@@ -145,53 +149,146 @@ export default function App() {
     document.body.removeChild(textArea);
   };
 
-  // Cargar Audio 
-  const handleAudioUpload = (e) => {
+  // ==========================================
+  // LÓGICA DEL VISOR DE ONDA Y SINCRONIZACIÓN
+  // ==========================================
+
+  // 1. Cargar archivo y extraer datos de audio (Web Audio API)
+  const handleAudioUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
       const url = URL.createObjectURL(file);
       setAudioUrl(url);
+      
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
+        const channelData = decodedData.getChannelData(0); // Tomamos el primer canal
+        
+        // Reducimos los datos a 1500 barras para dibujarlos eficientemente
+        const samples = 1500; 
+        const blockSize = Math.floor(channelData.length / samples);
+        const peaks = [];
+        
+        for(let i = 0; i < samples; i++) {
+            let min = 0;
+            let max = 0;
+            for(let j = 0; j < blockSize; j++) {
+                const val = channelData[i * blockSize + j];
+                if (val < min) min = val;
+                if (val > max) max = val;
+            }
+            peaks.push(Math.max(Math.abs(min), Math.abs(max)));
+        }
+        setWaveformData(peaks);
+      } catch (err) {
+        console.error("Error procesando forma de onda:", err);
+      }
     }
   };
 
-  // Controles de Audio Nativos
+  // 2. Dibujar la forma de onda, los marcadores y el progreso en el Canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || waveformData.length === 0) return;
+    
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    
+    const width = rect.width;
+    const height = rect.height;
+    
+    // Limpiar canvas
+    ctx.clearRect(0, 0, width, height);
+    
+    // Dibujar Forma de Onda Base (Color Azul/Índigo)
+    const barWidth = width / waveformData.length;
+    ctx.fillStyle = '#4f46e5'; 
+    waveformData.forEach((peak, index) => {
+        const barHeight = peak * height;
+        const x = index * barWidth;
+        const y = (height - barHeight) / 2;
+        ctx.fillRect(x, y, Math.max(1, barWidth - 0.5), barHeight);
+    });
+
+    // Dibujar Progreso de Reproducción (Sombra transparente)
+    if (audioDuration > 0) {
+        const progressX = (currentTime / audioDuration) * width;
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.4)'; // Sombra índigo
+        ctx.fillRect(0, 0, progressX, height);
+    }
+
+    // Dibujar Marcadores de Beats (Color Rosa)
+    if (analysisData?.step5_beats && audioDuration > 0) {
+        analysisData.step5_beats.forEach(beat => {
+            const beatSecs = timeToSeconds(beat.tiempo);
+            const xPos = (beatSecs / audioDuration) * width;
+            
+            ctx.beginPath();
+            ctx.moveTo(xPos, 0);
+            ctx.lineTo(xPos, height);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#f472b6'; // Rosa brillante
+            ctx.stroke();
+            
+            // Puntito en la parte superior e inferior para resaltar
+            ctx.fillStyle = '#f472b6';
+            ctx.beginPath(); ctx.arc(xPos, 4, 3, 0, 2 * Math.PI); ctx.fill();
+            ctx.beginPath(); ctx.arc(xPos, height - 4, 3, 0, 2 * Math.PI); ctx.fill();
+        });
+    }
+
+    // Dibujar Línea del Cabezal de Reproducción (Color Cyan)
+    if (audioDuration > 0) {
+        const progressX = (currentTime / audioDuration) * width;
+        ctx.beginPath();
+        ctx.moveTo(progressX, 0);
+        ctx.lineTo(progressX, height);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#22d3ee'; // Cyan brillante
+        ctx.stroke();
+    }
+  }, [waveformData, currentTime, audioDuration, analysisData]);
+
+  // Controles de Audio
   const togglePlay = () => {
     if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        audioRef.current.play();
-      }
+      isPlaying ? audioRef.current.pause() : audioRef.current.play();
       setIsPlaying(!isPlaying);
     }
   };
 
   const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
-    }
+    if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
   };
 
   const handleLoadedMetadata = () => {
-    if (audioRef.current) {
-      setAudioDuration(audioRef.current.duration);
-    }
+    if (audioRef.current) setAudioDuration(audioRef.current.duration);
   };
 
   const handleSeek = (e) => {
-    if (progressBarRef.current && audioRef.current) {
-      const rect = progressBarRef.current.getBoundingClientRect();
+    if (canvasRef.current && audioRef.current && audioDuration > 0) {
+      const rect = canvasRef.current.getBoundingClientRect();
       const clickX = e.clientX - rect.left;
-      const percentage = clickX / rect.width;
+      const percentage = Math.max(0, Math.min(1, clickX / rect.width));
       const newTime = percentage * audioDuration;
       audioRef.current.currentTime = newTime;
       setCurrentTime(newTime);
     }
   };
 
-  // Encontrar la sección del guion activa basada en el tiempo actual
-  const activeKeyframe = [...keyframes].reverse().find(kf => timeToSeconds(kf.time) <= currentTime) || keyframes[0];
-  const activeBeat = analysisData?.step5_beats ? [...analysisData.step5_beats].reverse().find(b => timeToSeconds(b.tiempo) <= currentTime) : null;
+  // Sincronización Estricta
+  const sortedKeyframes = [...keyframes].sort((a, b) => timeToSeconds(a.time) - timeToSeconds(b.time));
+  const activeKeyframe = sortedKeyframes.slice().reverse().find(kf => timeToSeconds(kf.time) <= currentTime) || sortedKeyframes[0];
+
+  const sortedBeats = analysisData?.step5_beats ? [...analysisData.step5_beats].sort((a, b) => timeToSeconds(a.tiempo) - timeToSeconds(b.tiempo)) : [];
+  const activeBeat = sortedBeats.slice().reverse().find(b => timeToSeconds(b.tiempo) <= currentTime);
 
   const colabInstallScript = `!pip install av pesq\n!pip install --no-dependencies git+https://github.com/facebookresearch/audiocraft.git\n!pip install xformers "transformers<4.40.0" flashy hydra-core julius num2words sentencepiece encodec torchdiffeq torchmetrics omegaconf`;
 
@@ -431,17 +528,28 @@ export default function App() {
             </div>
           )}
 
-          {/* PASO 8: REPRODUCTOR DE AUDIO SINCRONIZADO */}
+          {/* PASO 8: REPRODUCTOR DE AUDIO CON WAVEFORM NATIVO */}
           {step === 8 && (
             <div className="space-y-8 animate-in slide-in-from-right-4 duration-400">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                <Play className="text-cyan-400" /> Visor Sincronizado
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                  <Play className="text-cyan-400" /> Visor Sincronizado
+                </h2>
+                
+                {/* Leyenda de colores */}
+                {audioUrl && (
+                  <div className="flex gap-4 text-xs font-medium bg-slate-900/50 px-4 py-2 rounded-full border border-slate-800">
+                    <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> Audio</span>
+                    <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-pink-400"></div> Beats</span>
+                    <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-cyan-400"></div> Posición</span>
+                  </div>
+                )}
+              </div>
               
               {!audioUrl ? (
-                <div className="border-2 border-dashed border-slate-700 rounded-2xl p-12 text-center bg-slate-900/30">
+                <div className="border-2 border-dashed border-slate-700 rounded-2xl p-12 text-center bg-slate-900/30 hover:border-indigo-500/50 transition-colors">
                   <Upload size={48} className="mx-auto text-slate-500 mb-4" />
-                  <p className="text-slate-300 font-medium mb-4">Sube el archivo .wav generado en Google Colab</p>
+                  <p className="text-slate-300 font-medium mb-4">Sube el archivo .wav generado en Google Colab para ver la onda</p>
                   <label className="cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold inline-block transition-all shadow-lg">
                     Examinar Archivo
                     <input type="file" className="hidden" accept="audio/*" onChange={handleAudioUpload} />
@@ -449,7 +557,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* Reproductor Personalizado NATIVO */}
+                  {/* Reproductor con Canvas Waveform */}
                   <div className="bg-slate-950 border border-slate-800 p-6 rounded-2xl shadow-inner">
                     <audio 
                       ref={audioRef} 
@@ -460,19 +568,12 @@ export default function App() {
                       className="hidden" 
                     />
                     
-                    {/* Barra de progreso */}
-                    <div 
-                      ref={progressBarRef}
-                      onClick={handleSeek}
-                      className="w-full h-12 bg-slate-900 rounded-lg mb-4 cursor-pointer relative overflow-hidden border border-slate-800 hover:border-indigo-500/50 transition-colors"
-                    >
-                      <div 
-                        className="h-full bg-indigo-600/50 absolute top-0 left-0 transition-all duration-75"
-                        style={{ width: `${audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0}%` }}
-                      />
-                      <div 
-                        className="h-full bg-indigo-500 absolute top-0 left-0 transition-all duration-75 w-1"
-                        style={{ left: `${audioDuration > 0 ? (currentTime / audioDuration) * 100 : 0}%` }}
+                    {/* CANVAS WAVEFORM INTERACTIVO */}
+                    <div className="relative w-full h-32 bg-slate-900 rounded-lg mb-4 overflow-hidden border border-slate-800">
+                      <canvas 
+                        ref={canvasRef}
+                        onClick={handleSeek}
+                        className="w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
                       />
                     </div>
 
@@ -489,19 +590,25 @@ export default function App() {
 
                   {/* Sincronización con el Guion */}
                   <div className="grid md:grid-cols-2 gap-6">
-                    <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl relative overflow-hidden group">
+                    <div className={`border p-6 rounded-2xl relative overflow-hidden group transition-all duration-300
+                      ${activeKeyframe?.prompt ? 'bg-slate-900 border-cyan-900/50' : 'bg-slate-900/50 border-slate-800'}`}>
                       <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500" />
                       <h4 className="text-cyan-400 font-bold text-xs uppercase tracking-widest mb-2">Momento Visual Actual</h4>
-                      <p className="text-slate-200 text-lg leading-relaxed font-medium">"{activeKeyframe?.prompt || '...'}"</p>
+                      {activeKeyframe?.prompt ? (
+                        <p className="text-slate-200 text-lg leading-relaxed font-medium">"{activeKeyframe.prompt}"</p>
+                      ) : (
+                        <p className="text-slate-600 italic">Esperando inicio visual...</p>
+                      )}
                     </div>
 
-                    <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl relative overflow-hidden">
+                    <div className={`border p-6 rounded-2xl relative overflow-hidden transition-all duration-300
+                      ${activeBeat ? 'bg-pink-950/20 border-pink-900/50' : 'bg-slate-900/50 border-slate-800'}`}>
                       <div className="absolute top-0 left-0 w-1 h-full bg-pink-500" />
                       <h4 className="text-pink-400 font-bold text-xs uppercase tracking-widest mb-2">Evento Sonoro (Beat)</h4>
                       {activeBeat ? (
-                        <p className="text-slate-200 text-lg leading-relaxed font-medium capitalize">{activeBeat.evento}</p>
+                        <p className="text-pink-100 text-lg leading-relaxed font-medium capitalize">{activeBeat.evento}</p>
                       ) : (
-                        <p className="text-slate-500 italic">Esperando evento sonoro...</p>
+                        <p className="text-slate-600 italic">Sin evento en este segundo...</p>
                       )}
                     </div>
                   </div>
@@ -528,3 +635,6 @@ export default function App() {
     </div>
   );
 }
+
+
+```
