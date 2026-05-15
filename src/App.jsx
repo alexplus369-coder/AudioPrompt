@@ -1,4 +1,3 @@
-```react
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   FileText, Activity, Scissors, Clock, Drum, 
@@ -635,6 +634,3 @@ export default function App() {
     </div>
   );
 }
-
-
-```
