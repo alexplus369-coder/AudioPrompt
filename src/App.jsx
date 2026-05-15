@@ -69,19 +69,28 @@ export default function App() {
     setIsLoading(true);
     setError("");
 
-    const systemPrompt = `Eres un experto en diseño sonoro y composición musical. Analiza este guion y sus señales visuales.
+    // ==========================================
+    // NUEVO PROMPT REFORZADO PARA SINCRONIZACIÓN
+    // ==========================================
+    const systemPrompt = `Eres un experto en diseño sonoro cinematográfico y composición algorítmica. Analiza este guion y sus señales visuales.
       RESTRICCIONES:
       - Duración total del track: ${duration} segundos.
-      - Palabras clave para acentos de Bajos/Kicks: ${keywords}.
-      - Debes mapear los eventos según el tiempo y los fotogramas proporcionados.
-      Genera UN SOLO OBJETO JSON con la siguiente estructura:
+      - Palabras clave obligatorias para acentos/kicks: "${keywords}".
+      
+      CRÍTICO PARA LA SINCRONIZACIÓN EN MUSICGEN:
+      Para que los eventos sonoros ("step5_beats") coincidan matemáticamente en la onda de audio, tu "prompt_music" DEBE seguir esta estructura de "Time-coded Prompting":
+      1. Inicia definiendo el tempo ideal (BPM) que cuadre con los silencios y acentos (Ej: "120 BPM").
+      2. Redacta el desarrollo del track en INGLÉS utilizando corchetes de tiempo "[]" exactamente en los segundos donde hay eventos o palabras clave.
+      3. Ejemplo de formato: "120 BPM, heavy cinematic hybrid trailer music. [0:00] slow atmospheric intro, [0:14] massive bass drop and heavy kicks, [0:22] rhythmic acceleration, [0:30] abrupt silence."
+
+      Genera UN SOLO OBJETO JSON con la siguiente estructura exacta:
       {
         "step2_analysis": { "energia": "", "emocion": "", "ritmo": "", "tension": "", "intencion_viral": "" },
         "step3_scenes": [ { "fase": "HOOK/BUILDUP/CLIMAX/CTA", "texto": "" } ],
         "step4_retention": [ { "tiempo": "0-3s", "efecto": "" } ],
         "step5_beats": [ { "tiempo": "0:00", "evento": "" } ],
         "step6_recommendations": { "musica": "", "sonidos": "", "efectos": "", "ritmo": "" },
-        "step7_prompts": { "prompt_fx": "Prompt EN INGLÉS", "prompt_music": "Prompt EN INGLÉS" }
+        "step7_prompts": { "prompt_fx": "Prompt EN INGLÉS descriptivo", "prompt_music": "Prompt EN INGLÉS estructurado con [BPM] y [marcas de tiempo]" }
       }`;
 
     try {
@@ -152,7 +161,6 @@ export default function App() {
   // LÓGICA DEL VISOR DE ONDA Y SINCRONIZACIÓN
   // ==========================================
 
-  // 1. Cargar archivo y extraer datos de audio (Web Audio API)
   const handleAudioUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -163,9 +171,8 @@ export default function App() {
         const arrayBuffer = await file.arrayBuffer();
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
-        const channelData = decodedData.getChannelData(0); // Tomamos el primer canal
+        const channelData = decodedData.getChannelData(0); 
         
-        // Reducimos los datos a 1500 barras para dibujarlos eficientemente
         const samples = 1500; 
         const blockSize = Math.floor(channelData.length / samples);
         const peaks = [];
@@ -187,7 +194,6 @@ export default function App() {
     }
   };
 
-  // 2. Dibujar la forma de onda, los marcadores y el progreso en el Canvas
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || waveformData.length === 0) return;
@@ -203,10 +209,8 @@ export default function App() {
     const width = rect.width;
     const height = rect.height;
     
-    // Limpiar canvas
     ctx.clearRect(0, 0, width, height);
     
-    // Dibujar Forma de Onda Base (Color Azul/Índigo)
     const barWidth = width / waveformData.length;
     ctx.fillStyle = '#4f46e5'; 
     waveformData.forEach((peak, index) => {
@@ -216,14 +220,12 @@ export default function App() {
         ctx.fillRect(x, y, Math.max(1, barWidth - 0.5), barHeight);
     });
 
-    // Dibujar Progreso de Reproducción (Sombra transparente)
     if (audioDuration > 0) {
         const progressX = (currentTime / audioDuration) * width;
-        ctx.fillStyle = 'rgba(99, 102, 241, 0.4)'; // Sombra índigo
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.4)'; 
         ctx.fillRect(0, 0, progressX, height);
     }
 
-    // Dibujar Marcadores de Beats (Color Rosa)
     if (analysisData?.step5_beats && audioDuration > 0) {
         analysisData.step5_beats.forEach(beat => {
             const beatSecs = timeToSeconds(beat.tiempo);
@@ -233,29 +235,26 @@ export default function App() {
             ctx.moveTo(xPos, 0);
             ctx.lineTo(xPos, height);
             ctx.lineWidth = 2;
-            ctx.strokeStyle = '#f472b6'; // Rosa brillante
+            ctx.strokeStyle = '#f472b6'; 
             ctx.stroke();
             
-            // Puntito en la parte superior e inferior para resaltar
             ctx.fillStyle = '#f472b6';
             ctx.beginPath(); ctx.arc(xPos, 4, 3, 0, 2 * Math.PI); ctx.fill();
             ctx.beginPath(); ctx.arc(xPos, height - 4, 3, 0, 2 * Math.PI); ctx.fill();
         });
     }
 
-    // Dibujar Línea del Cabezal de Reproducción (Color Cyan)
     if (audioDuration > 0) {
         const progressX = (currentTime / audioDuration) * width;
         ctx.beginPath();
         ctx.moveTo(progressX, 0);
         ctx.lineTo(progressX, height);
         ctx.lineWidth = 2;
-        ctx.strokeStyle = '#22d3ee'; // Cyan brillante
+        ctx.strokeStyle = '#22d3ee'; 
         ctx.stroke();
     }
   }, [waveformData, currentTime, audioDuration, analysisData]);
 
-  // Controles de Audio
   const togglePlay = () => {
     if (audioRef.current) {
       isPlaying ? audioRef.current.pause() : audioRef.current.play();
@@ -282,12 +281,12 @@ export default function App() {
     }
   };
 
-  // Sincronización Estricta
+  // Tolerancia de 0.5 segundos para resaltar el evento activo
   const sortedKeyframes = [...keyframes].sort((a, b) => timeToSeconds(a.time) - timeToSeconds(b.time));
-  const activeKeyframe = sortedKeyframes.slice().reverse().find(kf => timeToSeconds(kf.time) <= currentTime) || sortedKeyframes[0];
+  const activeKeyframe = sortedKeyframes.slice().reverse().find(kf => timeToSeconds(kf.time) <= currentTime + 0.5) || sortedKeyframes[0];
 
   const sortedBeats = analysisData?.step5_beats ? [...analysisData.step5_beats].sort((a, b) => timeToSeconds(a.tiempo) - timeToSeconds(b.tiempo)) : [];
-  const activeBeat = sortedBeats.slice().reverse().find(b => timeToSeconds(b.tiempo) <= currentTime);
+  const activeBeat = sortedBeats.slice().reverse().find(b => timeToSeconds(b.tiempo) <= currentTime + 0.5);
 
   const colabInstallScript = `!pip install av pesq\n!pip install --no-dependencies git+https://github.com/facebookresearch/audiocraft.git\n!pip install xformers "transformers<4.40.0" flashy hydra-core julius num2words sentencepiece encodec torchdiffeq torchmetrics omegaconf`;
 
@@ -380,7 +379,7 @@ export default function App() {
               {error && <div className="bg-red-950/30 border border-red-900 p-4 rounded-xl flex items-center gap-3 text-red-400 animate-pulse"><AlertCircle size={20} /> <span className="text-sm font-medium">{error}</span></div>}
 
               <button onClick={runAnalysis} disabled={isLoading} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold text-lg flex items-center justify-center gap-3 shadow-lg shadow-indigo-900/20 transition-all active:scale-[0.98]">
-                {isLoading ? <><Loader2 className="animate-spin" /> Procesando Multimodalidad...</> : <>Generar Arquitectura de Audio <Sparkles size={22} /></>}
+                {isLoading ? <><Loader2 className="animate-spin" /> Procesando Sincronización Temporal...</> : <>Generar Arquitectura de Audio <Sparkles size={22} /></>}
               </button>
             </div>
           )}
@@ -488,7 +487,23 @@ export default function App() {
                </div>
 
                <div className="grid gap-6">
-                 {/* FX PROMPT (Restaurado para que puedas copiarlo manualmente si lo deseas) */}
+                 {/* MUSIC PROMPT (Ahora el protagonista) */}
+                 <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-lg border-l-4 border-l-pink-500">
+                    <div className="bg-slate-900 p-4 border-b border-slate-800 flex justify-between items-center">
+                      <span className="font-bold text-pink-300 flex items-center gap-2 text-sm uppercase tracking-wider"><Music size={16}/> Prompt Estructurado para Música (MusicGen)</span>
+                      <button onClick={() => copyToClipboard(analysisData.step7_prompts.prompt_music, 'mu')} className="text-slate-500 hover:text-white transition-all p-1">
+                        {copied === 'mu' ? <CheckCircle2 size={18} className="text-emerald-400" /> : <Copy size={18} />}
+                      </button>
+                    </div>
+                    <div className="p-5 font-mono text-xs text-pink-100/90 leading-loose whitespace-pre-wrap">
+                      {analysisData.step7_prompts.prompt_music}
+                    </div>
+                    <div className="px-5 pb-4 text-[10px] text-pink-500/80 italic">
+                      * Nota: Este prompt incluye "Time-codes" y cálculo de BPM para forzar sincronía con tus Beats.
+                    </div>
+                 </div>
+
+                 {/* FX PROMPT */}
                  <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
                     <div className="bg-slate-900 p-4 border-b border-slate-800 flex justify-between items-center">
                       <span className="font-bold text-indigo-300 flex items-center gap-2 text-sm uppercase tracking-wider"><Activity size={16}/> Prompt para FX</span>
@@ -498,19 +513,6 @@ export default function App() {
                     </div>
                     <div className="p-5 font-mono text-xs text-slate-400 leading-loose whitespace-pre-wrap">
                       {analysisData.step7_prompts.prompt_fx}
-                    </div>
-                 </div>
-
-                 {/* MUSIC PROMPT (Restaurado) */}
-                 <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
-                    <div className="bg-slate-900 p-4 border-b border-slate-800 flex justify-between items-center">
-                      <span className="font-bold text-pink-300 flex items-center gap-2 text-sm uppercase tracking-wider"><Music size={16}/> Prompt para Música (MusicGen)</span>
-                      <button onClick={() => copyToClipboard(analysisData.step7_prompts.prompt_music, 'mu')} className="text-slate-500 hover:text-white transition-all p-1">
-                        {copied === 'mu' ? <CheckCircle2 size={18} className="text-emerald-400" /> : <Copy size={18} />}
-                      </button>
-                    </div>
-                    <div className="p-5 font-mono text-xs text-slate-400 leading-loose whitespace-pre-wrap">
-                      {analysisData.step7_prompts.prompt_music}
                     </div>
                  </div>
 
