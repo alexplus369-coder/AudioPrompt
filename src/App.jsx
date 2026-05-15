@@ -289,25 +289,135 @@ export default function App() {
             </div>
           )}
 
-          {/* PASOS 2-6 */}
-          {step > 1 && step < 7 && analysisData && (
-             <div className="space-y-8 animate-in fade-in duration-500 text-center py-20">
-                <Activity size={48} className="mx-auto text-indigo-500 mb-4 opacity-50" />
-                <h2 className="text-2xl font-bold text-white">Análisis IA Completado</h2>
-                <p className="text-slate-400">Puedes revisar los perfiles de ritmo y emoción. Navega al Paso 7 para exportar.</p>
-             </div>
+          {/* PASO 2: RESULTADOS ANALISIS */}
+          {step === 2 && analysisData && (
+            <div className="space-y-8 animate-in fade-in duration-500">
+               <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <Activity className="text-cyan-400" /> Perfil Emocional del Proyecto
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                {Object.entries(analysisData.step2_analysis).map(([k, v]) => (
+                  <div key={k} className="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center hover:border-indigo-500/40 transition-all shadow-lg">
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">{k.replace('_', ' ')}</p>
+                    <p className="text-lg font-bold text-indigo-100">{v}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
+          {/* PASO 3: SCENES */}
+          {step === 3 && analysisData && (
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-400">
+               <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <Scissors className="text-indigo-400" /> Segmentación de Escenas
+              </h2>
+              <div className="space-y-3">
+                {analysisData.step3_scenes.map((s, i) => (
+                  <div key={i} className="flex flex-col md:flex-row gap-4 bg-slate-950 p-5 rounded-2xl border border-slate-800 group hover:bg-slate-900/60 transition-all shadow-lg">
+                    <span className={`px-4 py-1 rounded-full text-[11px] font-black w-fit h-fit uppercase tracking-wider
+                      ${s.fase === 'CLIMAX' ? 'bg-red-900/40 text-red-400 border border-red-800' : 'bg-indigo-900/40 text-indigo-400 border border-indigo-800'}`}>
+                      {s.fase}
+                    </span>
+                    <p className="text-slate-300 italic">"{s.texto}"</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* PASO 4: RETENTION */}
+          {step === 4 && analysisData && (
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-400">
+               <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <Clock className="text-amber-400" /> Línea de Retención (Efectos)
+              </h2>
+              <div className="relative pl-8 border-l border-slate-800 space-y-10 py-4">
+                {analysisData.step4_retention.map((r, i) => (
+                  <div key={i} className="relative">
+                    <div className="absolute -left-[37px] top-1.5 w-4 h-4 bg-amber-500 rounded-full border-4 border-slate-950" />
+                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 max-w-lg shadow-lg">
+                      <span className="text-amber-500 font-mono text-xs font-bold">{r.tiempo}</span>
+                      <p className="text-white font-semibold mt-1 uppercase tracking-tight">{r.efecto}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* PASO 5: BEATS */}
+          {step === 5 && analysisData && (
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-400">
+               <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <Drum className="text-pink-400" /> Marcadores de Ritmo (Beats)
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {analysisData.step5_beats.map((b, i) => (
+                  <div key={i} className="flex items-center gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800 shadow-lg">
+                    <span className="text-pink-400 font-mono font-bold bg-pink-950/30 px-2 py-1 rounded">{b.tiempo}</span>
+                    <ChevronRight className="text-slate-700" size={16} />
+                    <span className="text-slate-300 text-sm font-medium">{b.evento}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* PASO 6: RECO */}
+          {step === 6 && analysisData && (
+            <div className="space-y-8 animate-in slide-in-from-right-4 duration-400">
+               <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <Sparkles className="text-emerald-400" /> Recomendaciones Técnicas
+              </h2>
+              <div className="grid md:grid-cols-2 gap-6">
+                {Object.entries(analysisData.step6_recommendations).map(([k, v]) => (
+                  <div key={k} className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800 shadow-lg">
+                    <h4 className="text-emerald-400 font-bold text-xs uppercase tracking-widest mb-4">{k}</h4>
+                    <p className="text-slate-300 text-sm leading-relaxed">{v}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* PASO 7: PROMPTS Y EXPORTACIÓN */}
           {step === 7 && analysisData && (
             <div className="space-y-8 animate-in slide-in-from-right-4 duration-400">
                <div className="flex justify-between items-center">
                  <h2 className="text-2xl font-bold text-white flex items-center gap-3"><Music className="text-indigo-400" /> Prompts y Exportación</h2>
-                 <button onClick={exportJSON} className="flex items-center gap-2 px-4 py-2 bg-indigo-900/30 text-indigo-400 border border-indigo-800 rounded-lg text-sm hover:bg-indigo-900/50 transition-all font-bold">
+                 <button onClick={exportJSON} className="flex items-center gap-2 px-4 py-2 bg-indigo-900/30 text-indigo-400 border border-indigo-800 rounded-lg text-sm hover:bg-indigo-900/50 transition-all font-bold shadow-lg">
                    Exportar JSON <Download size={16} />
                  </button>
                </div>
 
                <div className="grid gap-6">
+                 {/* FX PROMPT (Restaurado para que puedas copiarlo manualmente si lo deseas) */}
+                 <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
+                    <div className="bg-slate-900 p-4 border-b border-slate-800 flex justify-between items-center">
+                      <span className="font-bold text-indigo-300 flex items-center gap-2 text-sm uppercase tracking-wider"><Activity size={16}/> Prompt para FX</span>
+                      <button onClick={() => copyToClipboard(analysisData.step7_prompts.prompt_fx, 'fx')} className="text-slate-500 hover:text-white transition-all p-1">
+                        {copied === 'fx' ? <CheckCircle2 size={18} className="text-emerald-400" /> : <Copy size={18} />}
+                      </button>
+                    </div>
+                    <div className="p-5 font-mono text-xs text-slate-400 leading-loose whitespace-pre-wrap">
+                      {analysisData.step7_prompts.prompt_fx}
+                    </div>
+                 </div>
+
+                 {/* MUSIC PROMPT (Restaurado) */}
+                 <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-lg">
+                    <div className="bg-slate-900 p-4 border-b border-slate-800 flex justify-between items-center">
+                      <span className="font-bold text-pink-300 flex items-center gap-2 text-sm uppercase tracking-wider"><Music size={16}/> Prompt para Música (MusicGen)</span>
+                      <button onClick={() => copyToClipboard(analysisData.step7_prompts.prompt_music, 'mu')} className="text-slate-500 hover:text-white transition-all p-1">
+                        {copied === 'mu' ? <CheckCircle2 size={18} className="text-emerald-400" /> : <Copy size={18} />}
+                      </button>
+                    </div>
+                    <div className="p-5 font-mono text-xs text-slate-400 leading-loose whitespace-pre-wrap">
+                      {analysisData.step7_prompts.prompt_music}
+                    </div>
+                 </div>
+
                  <div className="bg-slate-900/80 rounded-2xl border border-slate-700 overflow-hidden shadow-lg mt-4">
                     <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
                       <span className="font-bold text-amber-400 flex items-center gap-2 text-sm uppercase tracking-wider"><Terminal size={16}/> Configuración para Google Colab</span>
